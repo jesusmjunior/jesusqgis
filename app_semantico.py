@@ -247,18 +247,21 @@ def generate_lidar_sample(center_lat, center_lon, radius=0.05, points=1000):
     z[river_mask] = base_altitude - 5 + np.random.normal(0, 0.5, np.sum(river_mask))
     
     # Floresta (maior variabilidade do dossel)
-    forest_height = np.random.gamma(shape=9, scale=4, np.sum(forest_mask))  # ~35m média
+    # CORRIGIDO: Nomeando o parâmetro 'size' para np.random.gamma
+    forest_height = np.random.gamma(shape=9, scale=4, size=np.sum(forest_mask))  # ~35m média
     z[forest_mask] = base_altitude + np.random.normal(0, 5, np.sum(forest_mask)) + forest_height
     
     # Vegetação secundária
-    sec_height = np.random.gamma(shape=3, scale=2, np.sum(secondary_mask))  # ~6m média
+    # CORRIGIDO: Nomeando o parâmetro 'size' para np.random.gamma
+    sec_height = np.random.gamma(shape=3, scale=2, size=np.sum(secondary_mask))  # ~6m média
     z[secondary_mask] = base_altitude + np.random.normal(0, 3, np.sum(secondary_mask)) + sec_height
     
     # Solo exposto
     z[cleared_mask] = base_altitude + np.random.normal(0, 2, np.sum(cleared_mask))
     
     # Infraestrutura
-    build_height = np.random.gamma(shape=2, scale=2, np.sum(infrastructure_mask))  # ~4m média
+    # CORRIGIDO: Nomeando o parâmetro 'size' para np.random.gamma
+    build_height = np.random.gamma(shape=2, scale=2, size=np.sum(infrastructure_mask))  # ~4m média
     z[infrastructure_mask] = base_altitude + build_height
     
     # Intensidade (reflexão) - varia por tipo de cobertura
