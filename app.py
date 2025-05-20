@@ -5,8 +5,6 @@ import os
 import json
 import requests
 import base64
-from PIL import Image
-from io import BytesIO
 import time
 
 # Configuração da página
@@ -136,12 +134,79 @@ def create_download_link(df, filename, link_text):
     href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">{link_text}</a>'
     return href
 
+def create_geojson_for_download(coordinates, filename="pontos_amazonia.geojson"):
+    """Cria um GeoJSON para download a partir das coordenadas."""
+    geojson = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {
+                    "name": point['name'],
+                    "type": point['type']
+                },
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [point['lon'], point['lat']]
+                }
+            } for point in coordinates
+        ]
+    }
+    
+    # Converter para JSON string
+    geojson_str = json.dumps(geojson, indent=2)
+    
+    # Criar link para download
+    b64 = base64.b64encode(geojson_str.encode()).decode()
+    href = f'<a href="data:application/json;base64,{b64}" download="{filename}">{filename}</a>'
+    
+    return href
+
+def create_qml_style(style_type="ship"):
+    """Cria um arquivo de estilo QML para ícones."""
+    qml_content = """<!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>
+<qgis version="3.22.0-Białowieża" styleCategories="Symbology">
+  <renderer-v2 forceraster="0" type="singleSymbol" symbollevels="0" enableorderby="0">
+    <symbols>
+      <symbol name="0" force_rhr="0" type="marker" clip_to_extent="1" alpha="1">
+        <layer locked="0" enabled="1" class="SvgMarker" pass="0">
+          <prop k="angle" v="0"/>
+          <prop k="color" v="0,0,0,255"/>
+          <prop k="fixedAspectRatio" v="0"/>
+          <prop k="horizontal_anchor_point" v="1"/>
+          <prop k="name" v="transport/transport_nautical_harbour.svg"/>
+          <prop k="offset" v="0,0"/>
+          <prop k="offset_map_unit_scale" v="3x:0,0,0,0,0,0"/>
+          <prop k="offset_unit" v="MM"/>
+          <prop k="outline_color" v="0,0,0,255"/>
+          <prop k="outline_width" v="0.2"/>
+          <prop k="outline_width_map_unit_scale" v="3x:0,0,0,0,0,0"/>
+          <prop k="outline_width_unit" v="MM"/>
+          <prop k="scale_method" v="diameter"/>
+          <prop k="size" v="4"/>
+          <prop k="size_map_unit_scale" v="3x:0,0,0,0,0,0"/>
+          <prop k="size_unit" v="MM"/>
+          <prop k="vertical_anchor_point" v="1"/>
+        </layer>
+      </symbol>
+    </symbols>
+    <rotation/>
+    <sizescale/>
+  </renderer-v2>
+</qgis>
+"""
+    # Criar link para download
+    b64 = base64.b64encode(qml_content.encode()).decode()
+    href = f'<a href="data:text/xml;base64,{b64}" download="estilo_caravela.qml">estilo_caravela.qml</a>'
+    
+    return href
+
 # --------- INTERFACE DO APLICATIVO STREAMLIT ---------
 st.title("🌎 GAIA DIGITAL - Análise Geoespacial Amazônica")
 st.markdown("""
 Este aplicativo gera análises geoespaciais para a região Amazônica,
 utilizando inteligência artificial para processar descrições textuais e gerar
-camadas compatíveis com QGIS, incluindo dados LiDAR simulados.
+camadas compatíveis com QGIS, incluindo dados LiDAR simulados e ícones de caravela.
 """)
 
 # Barra lateral com opções
@@ -189,65 +254,81 @@ if st.button("Processar e Gerar Mapa"):
     st.subheader("Amostra de Dados LiDAR (Simulados)")
     st.dataframe(lidar_data.head(10))
     
-    # Criar visualização simples com matplotlib
-    st.subheader("Visualização de Elevação LiDAR")
+    # Visualizar mapa usando OpenStreetMap incorporado em um iframe HTML
+    st.subheader("Visualização do Mapa (OpenStreetMap)")
     
-    # Plotar dados 2D coloridos por elevação
-    fig, ax = st.columns(2)
-    with fig:
-        from matplotlib import pyplot as plt
-        
-        # Criar figura
-        plt.figure(figsize=(10, 6))
-        plt.scatter(lidar_data['X'], lidar_data['Y'], c=lidar_data['Z'], 
-                   cmap='terrain', alpha=0.6, s=2)
-        plt.colorbar(label='Elevação (m)')
-        plt.xlabel('Longitude')
-        plt.ylabel('Latitude')
-        plt.title('Dados LiDAR Simulados (Vista de Topo)')
-        
-        # Exibir
-        st.pyplot(plt)
+    # Criar o HTML para incorporar o OpenStreetMap
+    map_html = f"""
+    <iframe width="100%" height="450" frameborder="0" scrolling="no" marginheight="0" marginwidth="0" 
+    src="https://www.openstreetmap.org/export/embed.html?bbox={center_lon-0.1}%2C{center_lat-0.1}%2C{center_lon+0.1}%2C{center_lat+0.1}&amp;layer=mapnik" 
+    style="border: 1px solid black"></iframe>
+    <br/>
+    <small>
+        <a href="https://www.openstreetmap.org/#map=12/{center_lat}/{center_lon}">Ver mapa maior</a>
+    </small>
+    """
+    
+    st.markdown(map_html, unsafe_allow_html=True)
+    
+    # Exibir estatísticas simples dos dados LiDAR
+    st.subheader("Estatísticas dos Dados LiDAR")
+    
+    stats_dict = {
+        "Elevação Média (m)": round(lidar_data['Z'].mean(), 2),
+        "Elevação Mínima (m)": round(lidar_data['Z'].min(), 2),
+        "Elevação Máxima (m)": round(lidar_data['Z'].max(), 2),
+        "Desvio Padrão (m)": round(lidar_data['Z'].std(), 2),
+        "Total de Pontos": len(lidar_data)
+    }
+    
+    # Exibir como colunas para melhor visualização
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Elevação Média (m)", f"{stats_dict['Elevação Média (m)']}")
+    col2.metric("Elevação Mínima (m)", f"{stats_dict['Elevação Mínima (m)']}")
+    col3.metric("Elevação Máxima (m)", f"{stats_dict['Elevação Máxima (m)']}")
+    
+    col1, col2 = st.columns(2)
+    col1.metric("Desvio Padrão (m)", f"{stats_dict['Desvio Padrão (m)']}")
+    col2.metric("Total de Pontos", f"{stats_dict['Total de Pontos']}")
     
     # Seção de downloads
     st.subheader("Exportar para QGIS")
     
     # Criar links de download
+    st.markdown("### Dados LiDAR")
     st.markdown(create_download_link(lidar_data, "amazonia_lidar.csv", 
                                    "⬇️ Download Dados LiDAR (CSV)"), unsafe_allow_html=True)
     
-    # Criar um arquivo GeoJSON simplificado para os pontos
-    st.markdown("""
-    ```javascript
-    {
-      "type": "FeatureCollection",
-      "features": [
-    """ + ",\n".join([f"""    {{
-      "type": "Feature",
-      "properties": {{
-        "name": "{point['name']}",
-        "type": "{point['type']}"
-      }},
-      "geometry": {{
-        "type": "Point",
-        "coordinates": [{point['lon']}, {point['lat']}]
-      }}
-    }}""" for point in coordinates]) + """
-      ]
-    }
-    ```
-    """)
+    st.markdown("### Pontos de Interesse (GeoJSON)")
+    st.markdown(create_geojson_for_download(coordinates, "pontos_amazonia.geojson"), 
+               unsafe_allow_html=True)
+    
+    st.markdown("### Estilo de Caravela para QGIS (QML)")
+    st.markdown(create_qml_style(), unsafe_allow_html=True)
     
     # Instruções para QGIS
     with st.expander("Como importar no QGIS"):
         st.markdown("""
-        1. Baixe o arquivo CSV com dados LiDAR
-        2. No QGIS, vá para "Camada > Adicionar Camada > Adicionar Camada de Texto Delimitado"
-        3. Selecione o arquivo CSV baixado
-        4. Especifique "X" como longitude e "Y" como latitude (ou coordenadas X/Y)
-        5. Selecione CRS EPSG:4326 (WGS 84)
-        6. Para os pontos de interesse, crie um arquivo GeoJSON copiando o texto acima
-        7. Para adicionar o ícone de caravela, use um símbolo SVG personalizado em "Simbologia"
+        ### Instruções para importação no QGIS
+        
+        #### 1. Importar Dados LiDAR
+        - Baixe o arquivo CSV com dados LiDAR
+        - No QGIS, vá para "Camada > Adicionar Camada > Adicionar Camada de Texto Delimitado"
+        - Selecione o arquivo CSV baixado
+        - Especifique "X" como longitude e "Y" como latitude (ou coordenadas X/Y)
+        - Selecione CRS EPSG:4326 (WGS 84)
+        
+        #### 2. Importar Pontos de Interesse com Ícone de Caravela
+        - Baixe o arquivo GeoJSON de pontos de interesse
+        - No QGIS, vá para "Camada > Adicionar Camada > Adicionar Camada Vetorial"
+        - Selecione o arquivo GeoJSON baixado
+        - Baixe o arquivo de estilo QML
+        - Clique com botão direito na camada > Propriedades > Simbologia
+        - Clique em "Carregar Estilo" e selecione o arquivo QML baixado
+        
+        #### 3. Visualização 3D (opcional)
+        - Para visualização 3D, instale o plugin "Qgis2threejs"
+        - Selecione a camada LiDAR e use o plugin para criar uma visualização 3D
         """)
         
     # Análise avançada com IA
